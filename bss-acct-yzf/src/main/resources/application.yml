@@ -1,0 +1,1 @@
+server:  port: 8097  servlet:    context-path: /bss-acct-yzflogging:   config: file:conf_bssAcctYzf/log4j2.xmlspring:  jpa:    database: mysql    show-sql: true    hibernate:      ddl-auto: update

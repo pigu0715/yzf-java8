@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="web.TestMapper">
+
+	<select id="queryLatnInfo" resultType="java.util.Map" parameterType="java.util.Map">
+		select latn_id latnId, latn_name latnName from latn where latn_id != 888
+	</select>
+ 
+</mapper> 

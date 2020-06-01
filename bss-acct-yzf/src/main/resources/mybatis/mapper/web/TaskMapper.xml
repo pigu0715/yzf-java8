@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="web.TaskMapper">
+
+	<select id="getLatn" resultType="java.util.Map" parameterType="java.util.Map">
+	   SELECT cast(a.COMMON_REGION_ID as char)  latnId,a.REGION_NAME latnName from common_region a 
+		where a.REGION_TYPE = '1300' 
+		  and a.COMMON_REGION_ID not in(129,888)
+	</select>
+	<select id="queryCommonRegion" resultType="java.util.Map" parameterType="java.util.Map">
+	  select COMMON_REGION_ID regionId,REGION_NAME regionName from common_region
+	</select>
+	
+	<select id="queryYzfInfo" resultType="com.tydic.bus.vo.AcctItemYzfBean" parameterType="java.util.Map">
+		/*!HINT({"dn":["acctdb_${area}"]})*/
+		select 
+			a.ACCT_ITEM_YZF_ID acctItemYzfId,
+			a.ACCT_ITEM_ID acctItemId,	
+			a.ACCT_ITEM_TYPE_ID acctItemTypeId,
+			a.PROD_INST_ID prodInstId,
+			a.AMOUNT amount,
+			a.BILLING_CYCLE_ID billingCycleId,
+			a.ACCT_ID acctId,
+			a.ACCT_ID acctIdOld,
+			a.STATUS_CD statusCd,
+			DATE_FORMAT(a.STATUS_DATE,'%Y%m%d%H%i%s') statusDate,	
+			a.REGION_ID	regionId,
+			a.CUST_ID custId,
+			a.OFFER_INST_ID offerInstId,
+			a.OFFER_ID offerId,
+			a.remark remark ,
+			b.OFFER_NAME offerName,
+			#{latnId} latnId
+		 from acct_item_yzf_${latnId} a, offer b
+		where a.OFFER_ID = b.OFFER_ID 
+		  and a.BILLING_CYCLE_ID = #{billingCycleId}
+		  and a.STATUS_CD = 0
+		limit 999999999
+	</select>
+	
+	<insert id="addYzfPackResult" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		insert into yzf_pack_result_new(
+											`ORDER_NUMBER`,
+											`SERV_ID`,
+											`ACCT_ID`,
+											`ACC_NBR`,
+											`CHARGE_AMOUNT`,
+											`AREA_CODE`,
+											`REGION_ID`,
+											`REGION_NAME`,
+											`PRODUCT_OFFER_INSTACN_ID`,
+											`PRODUCT_OFFER_ID`,
+											`offer_name`,
+											`BILL_CYCLE_ID`,
+											`CREATE_DATE`
+										)
+		VALUES
+		<foreach collection="addData" item="item" separator=",">
+			(
+				seq_yzf_pack_result_new.nextval
+				,#{item.prodInstId}
+				,#{item.acctId}
+				,#{item.accNbr}
+				,#{item.amount}
+				,#{item.areaCode}
+				,#{item.regionId}
+				,#{item.latnName}
+				,#{item.offerInstId}
+				,#{item.offerId}
+				,#{item.offerName}
+				,#{item.billingCycleId}
+				,now()
+			)
+		</foreach>
+	</insert>
+	
+	<update id="updateYzfStatusCd" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		update acct_item_yzf_${latnId} 
+		   set STATUS_CD = 1 ,
+		       remark = concat(DATE_FORMAT(now(),'%Y%m%d%H%i%s'), '返还')
+		 where ACCT_ID = #{acctIdOld}
+		   and STATUS_CD = 0
+		   and BILLING_CYCLE_ID = #{billingCycleId}
+		   and PROD_INST_ID = #{prodInstId}
+		   and OFFER_ID = #{offerId}
+	</update>
+ 
+	<select id="queryGroupBillingCycleId" resultType="java.util.Map" parameterType="java.util.Map">
+	   select BILLING_CYCLE_ID billingCycleId from acct_item_yzf_${latnId} group by BILLING_CYCLE_ID
+	</select>
+	
+	<select id="queryOfferIdList" resultType="java.util.Map" parameterType="java.util.Map">
+	   SELECT t.OFFER_ID offerId,t.ATTR_ID attrId from offer_ext_attr t WHERE t.attr_id = 121
+	</select>
+	
+	<!-- 根据账户查询欠费 -->
+	<select id="queryOweFeeByAcctId" resultType="java.util.Map" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		SELECT
+			acct_id,
+			sum(amount) oweFee
+		FROM
+			acct_item_20c_${latnId}
+		WHERE
+			acct_id = #{acctId} 
+		and billing_cycle_id= #{billingCycleId} 
+		group by acct_id
+	</select>
+	
+	<!-- 根据用户查询欠费 -->
+	<select id="queryOweFeeByProdInstId" resultType="java.util.Map" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		SELECT
+			prod_inst_id,
+			sum(amount) oweFee
+		FROM
+			acct_item_20c_${latnId}
+		WHERE
+			prod_inst_id = #{prodInstId} 
+		and billing_cycle_id= #{billingCycleId} 
+		group by prod_inst_id
+	</select>
+	
+	<select id="queryAmount" resultType="java.util.Map" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		select
+			sum(AMOUNT) amount
+		from ACCT_ITEM_20P_${latnId}
+		where acct_id = #{acctId}
+		and fee_cycle_id = #{billingCycleId}
+		and PROD_INST_ID = #{prodInstId}
+		GROUP BY BALANCE_TYPE_ID,	ACCT_ITEM_TYPE_ID
+	</select>
+	
+	<select id="queryReturn" resultType="java.util.Map" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		SELECT
+			count(*) record
+		FROM
+			YZF_PACK_RESULT_NEW
+		WHERE BILL_CYCLE_ID = #{billingCycleId} 
+		and SERV_ID = #{prodInstId} 
+		and PRODUCT_OFFER_ID = #{offerId}
+		and ACCT_ID = #{acctId}
+	</select>
+	
+	<select id="queryAccNbr" resultType="java.util.Map" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		select acc_num accNbr from prod_inst where prod_inst_id = #{prodInstId} limit 1 
+	</select>
+	
+	<select id="queryDcaPrdid" resultType="java.lang.String" parameterType="com.tydic.bus.vo.AcctItemYzfBean">
+		SELECT
+		 CONCAT(
+		  'BILLING.PRDID:',
+		  ifnull(PROD_INST_ID, '')
+		 ) AS DCA_KEY,
+		 CONCAT(
+		  ifnull(PROD_INST_ID, ''),
+		  '^',
+		 ifnull(PROD_INST_NAME, '')  ,
+		  '^',
+		  ifnull(PROD_TYPE_CD, ''),
+		  '^',
+		  ifnull(ACC_NUM, ''),
+		  '^',
+		  ifnull(STATUS_CD, ''),
+		  '^',
+		  ifnull(PROD_ID, ''),
+		  '^',
+		  ifnull(ACCOUNT, ''),
+		  '^',
+		  ifnull(PAYMENT_MODE_CD, ''),
+		  '^',
+		  ifnull(OWNER_CUST_ID, ''),
+		  '^',
+		  ifnull(OFFER_ID, ''),
+		  '^',
+		  ifnull(ACCT_ID, ''),
+		  '^',
+		  ifnull(LATN_ID, ''),
+		  '^',
+		  IFNULL(
+		   date_format(INSTALL_DATE, '%Y%m%d'),
+		   ''
+		  ),
+		  '^',
+		  ifnull(CUST_ID, ''),
+		  '^',
+		  ifnull(
+		   date_format(
+		    FIRST_FINISH_DATE,
+		    '%Y%m%d%H%i%s'
+		   ),
+		   ''
+		  ),
+		  '^',
+		 ifnull(INSTALL_ADDR, '') ,
+		  '^',
+		  ifnull(
+		   date_format(EFF_DATE, '%Y%m%d%H%i%s'),
+		   '20010101000000'
+		  ),
+		  '^',
+		  ifnull(
+		   date_format(EXP_DATE, '%Y%m%d%H%i%s'),
+		   '29990101000000'
+		  ),
+		'^',
+		ifnull(USER_BILL_ID,' ')
+		,'^',
+		ifnull(REGION_ID,' ')
+		,'^',
+		ifnull(AREA_CODE,' ')
+		,'^',
+		ifnull(EXCH_ID,' '),
+		'^'
+		 ) AS DCA_VAL
+		FROM
+		 PROD_INST WHERE PROD_INST_ID = #{prodInstId}
+	</select>
+	
+</mapper> 
